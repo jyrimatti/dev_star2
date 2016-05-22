@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+
+    <head>
+        <meta charset="utf-8">
+
+        <title>dev* - Workspace Manager: Käytännön kokemuksia Trakediasta</title>
+
+        <meta name="description" content="Ajatustenravistus tyyppiluokista, Haskellista, Scalasta ja Javasta">
+        <meta name="author" content="Jyri-Matti 'Jüppe' Lähteenmäki">
+
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+        <link rel="stylesheet" href="css/reveal.min.css">
+        <link rel="stylesheet" href="css/theme/serif.css" id="theme">
+
+        <!-- For syntax highlighting -->
+        <link rel="stylesheet" href="lib/css/zenburn.css">
+
+        <!-- If the query includes 'print-pdf', use the PDF print sheet -->
+        <script>
+            document.write( '<link rel="stylesheet" href="css/print/' + ( window.location.search.match( /print-pdf/gi ) ? 'pdf' : 'paper' ) + '.css" type="text/css" media="print">' );
+        </script>
+
+        <!--[if lt IE 9]>
+        <script src="lib/js/html5shiv.js"></script>
+        <![endif]-->
+
+        <style type="text/css">
+            code {
+                font-size: 17px !important;
+                line-height: 20px !important;
+            }
+        </style>
+    </head>
+
+    <body>
+
+        <div class="reveal">
+
+            <!-- Any section element inside of this container is displayed as a slide -->
+            <div class="slides">
+
+<section>
+<h1>Workspace Manager</h1>
+<br/>
+<p><i>Käytännön kokemuksia Trakediasta</i></p>
+</section>
+<section>
+<h2>näkymiä, näkymiä...</h2>
+<ul>
+  <li><i>Foo</i>:sta tulee näkymä, joka lukee <br/><i>Foo_Base</i>:sta, joka lukee <br/><i>Foo_LT</i>:stä...</li>
+  <li> tähän vielä päälle sovelluksen näkymät, niin kannan optimoijalle saattaa tulla hiki</li>
+</ul></section>
+<section>
+<h2>eivät toimi</h2>
+<ul>
+  <li>statement-level triggerit</li>
+  <li>jotkut DDL-operaatiot</li>
+  <li>entä DataPump tai kannan kopiointi/backup?</li>
+</ul></section>
+<section>
+<h2>rajoitteita</h2>
+<ul>
+  <li>jotkut operaatiot vaativat normaalia enemmän oikeuksia</li>
+  <li>viiteavain voi osoittaa vain pääavaimeen<br/>(ei uniikkiavaimeen)</li>
+  <li>pääavaimia ei voi muokata</li>
+  <li>materialisoiduissa näkymissä vain <br/><i>REFRESH COMPLETE</i>, ja näyttävät aina <br/>samaa dataa kaikissa workspaceissa</li>
+</ul></section>
+<section> 
+<h2>versiointiin liittyvä kannan metadata kantainstanssille globaalia</h2>
+<ul>
+  <li>EI siis schema-kohtaista</li>
+  <li> hankala siivota jos jotakin menee rikki?</li>
+</ul></section>
+<section>
+<h2>selkeät viestit?</h2>
+<ul>
+  <li>relaatiokannan virheilmoitukset monesti huonoja <br/>(<i>success with compilation error...</i>)</li>
+  <li>versioinnin kanssa näitä tulee normaalia enemmän</li>
+  <li>suoritussuunnitelmat?</li>
+  <li>perinteisten rajoitteiden toiminnallisuus siirretty triggereihin</li>
+  <li> vikaselvitys, auts...</li>
+</ul></section>
+<section>
+<h2>DDL</h2>
+<ul>
+  <li>ei voi tehdä näkymään (dah...), ei saa tehdä <i>_LT</i>-tauluun</li>
+  <li><i>dbms_wm.BeginDDL</i> -> <br/>muutokset <i>_LTS</i>-tauluun -> <br/><i>dbms_wm.CommitDDL</i></li>
+  <li>Oracle kopioi <i>_LTS</i>-tauluun tehdyt muutokset "perille"</li>
+  <li>välillä ongelmia:</li>
+    <ul>
+    <li>ei aina montaa ddl-lausetta samassa lohkossa</li>
+    <li>esim NOT-NULL-constraintit uusille sarakkeille pitää sanoa erikseen</li>
+    <li>hidas</li>
+    </ul>
+</ul>
+</section>
+<section>
+<ul>
+  <li>data pitää päivittää uuden scheman mukaiseksi</li>
+    <ul>
+    <li> nyt vain pitää päivittää data kaikissa workspaceissa</li>
+      <ul>
+      <li>RefreshWorkspace. Konfliktit?</li>
+      <li>lisäksi update-lauseet workspaceihin jotta <i>uudet</i> rivit päivittyvät...</li>
+      </ul>
+    <li> entäpä historiadata, joka roikkuu Oraclen muistissa? Vaikuttaisi aiheuttavan (ehkä) mystisiä konflikteja.</li>
+    </ul>
+</ul></section>
+<section>    
+<h2>historia</h2>
+<ul>
+  <li>savepointit 
+    <ul>
+        <li>explisiittiset</li>
+        <li>työtilojen luontien yhteydessä tulleet implisiittiset</li>
+    </ul>
+  </li>
+  <li>pitää siivota joskus (<i>CompressWorkspace</i>/<i>CompressWorkspaceTree</i>)</li>
+  <li>Oracle muistaa jos taulussa oli dataa kun taulun versiointi laitettiin päälle</li>
+  <li> vaikuttaisi estävän konfliktoivien constraintien luomisen, ehkä bugi?</li>
+</ul></section>
+<section>
+<h2>bugitus?</h2>
+<ul>
+  <li>Trakediassa tuotannosta löyty eräästä taulusta neljä riviä, joilla oli sama pääavain (!) kuin jollakin muulla rivillä.</li>
+  <li> luultavasti Workspace-managerin bugi, mutta miten korjata/raportoida kun ei saa edes toistettua?</li>
+</ul></section>
+<section>
+<h2>kaikesta huolimatta</h2>
+<ul>
+  <li>Oraclen dokumentaatio on suhteellisen hyvä!</li>
+  <li>mielivaltaisen pitkät transaktiot</li>
+  <li>what-if-skenaariot</li>
+  <li>triviaali undo-redo-toteutus savepointeilla workspace-kohtaisesti</li>
+</ul></section>
+
+<section>
+<h2>Esimerkki pienestä kantamuutoksesta</h2>
+<pre><code class="sql" data-trim contenteditable>
+-- uudet sarakkeet rajoituksineen elementtiversioon
+-- vaihteen käsikääntöisyydelle/varmuuslukitukselle
+CALL dbms_wm.BeginDDL('elementtiversio_');
+ALTER TABLE elementtiversio__LTS ADD kasikaantoisyys CHAR (1);
+ALTER TABLE elementtiversio__LTS ADD varmuuslukitus CHAR (1);
+CALL dbms_wm.CommitDDL('elementtiversio_');
+
+-- rajoitus pitää lisätä eri ddl-lohkossa, muuten Oracle failaa (huoh...)
+CALL dbms_wm.BeginDDL('elementtiversio_');
+ALTER TABLE elementtiversio__LTS ADD CONSTRAINT vv_kasikaantoisyys_ck CHECK (
+    kasikaantoisyys IN ('e', 'k', 'o', 'v'));
+ALTER TABLE elementtiversio__LTS ADD CONSTRAINT vv_varmuuslukitus_ck CHECK (
+    varmuuslukitus IN ('e', 'k', 'o', 'v'));
+CALL dbms_wm.CommitDDL('elementtiversio_');
+
+-- näkymä pitää luoda uudestaan sillä Oracle ei tallenna sitä "select *"-muodossa
+-- vaan purkaa tähden auki...
+CALL context_util.konteksti_nakyma_piste('ELEMENTTIVERSIO');
+-- triggerit pitää luoda uudestaan kun näkymä luodaan uudestaan...
+CALL context_util.konteksti_triggerit('ELEMENTTIVERSIO');
+
+-- poistetaan vanhentunut rajoite elementti-taulusta (luodaan myöhemmin takaisin)
+CALL dbms_wm.BeginDDL('elementti_');
+ALTER TABLE elementti__LTS DROP CONSTRAINT elementti_flag_CK_LTS;
+CALL dbms_wm.CommitDDL('elementti_');
+
+-- säästettään olemassaolevat käsikääntöisyysasetukset
+
+CREATE OR REPLACE PROCEDURE temp_infra_ddl_proc IS
+    BEGIN
+    UPDATE elementtiversio_
+    SET kasikaantoisyys = 'k',
+        varmuuslukitus = 'k'
+    WHERE elementtiid IN (
+        SELECT elementtiid FROM elementti_ WHERE flag=1 AND elementtityyppi='va');
+    
+    UPDATE elementtiversio_
+    SET kasikaantoisyys = 'e',
+        varmuuslukitus = 'e'
+    WHERE elementtiid IN (
+        SELECT elementtiid FROM elementti_ WHERE flag=0 AND elementtityyppi='va');
+    
+    -- nollataan vanha käsikääntöisyys-flägi kaikilta vaihteilta
+    
+    UPDATE elementti_
+    SET flag=NULL
+    WHERE elementtityyppi='va';
+    
+    COMMIT;
+END;
+/
+
+CALL temp_infra_ddl_proc();
+
+-- hups, nämä olisi jo pitänyt olla…
+GRANT EXECUTE ON util TO INFRA_READ_ROLE;
+GRANT EXECUTE ON util TO INFRA_USER_ROLE;
+
+CALL util.aja_proceduuri_linkkien_yli('util.refresh_tyotilat');
+
+CALL util.aja_proceduuri_linkkien_yli('util.compress_tyotilat');
+COMMIT;
+CALL util.compress_live();
+COMMIT;
+
+-- päivitetään arvot myös muissa työtiloissa oleviin uusiin riveihin
+CALL util.aja_infra_proc_tyotiloissa();
+
+DROP PROCEDURE temp_infra_ddl_proc;
+
+-- taulurajoite varmistamaan että uudet sarakkeet ovat vain vaihteilla
+-- ja laillisella yhdistelmällä
+CALL dbms_wm.BeginDDL('elementtiversio_');
+ALTER TABLE elementtiversio__LTS ADD CONSTRAINT vv_kasik_varm_CK CHECK (
+  (elementtityyppi != 'va' AND kasikaantoisyys IS NULL
+                           AND varmuuslukitus IS NULL) OR (
+    elementtityyppi = 'va' AND kasikaantoisyys IS NOT NULL
+                           AND varmuuslukitus IS NOT NULL AND (
+    varmuuslukitus = 'e' OR
+    varmuuslukitus = 'k' AND kasikaantoisyys = 'k' OR
+    varmuuslukitus = 'v' AND kasikaantoisyys IN ('k', 'v') OR
+    varmuuslukitus = 'o' AND kasikaantoisyys IN ('k', 'o'))
+  )
+);
+CALL dbms_wm.CommitDDL('elementtiversio_');
+
+-- luodaan elementti-taulun rajoite takaisin oikeanlaisena
+CALL dbms_wm.BeginDDL('elementti_');
+ALTER TABLE elementti__LTS ADD CONSTRAINT elementti_flag_CK CHECK (
+    elementtityyppi IN('ra','ba','ry') AND flag IS NOT NULL OR
+    elementtityyppi NOT IN ('ra','ba','ry') AND flag IS NULL);
+CALL dbms_wm.CommitDDL('elementti_');
+</code></pre></section>
+            </div>
+
+        </div>
+
+        <script src="lib/js/head.min.js"></script>
+        <script src="js/reveal.min.js"></script>
+
+        <script>
+
+            // Full list of configuration options available here:
+            // https://github.com/hakimel/reveal.js#configuration
+            Reveal.initialize({
+                controls: true,
+                progress: true,
+                history: true,
+                center: true,
+
+                theme: Reveal.getQueryHash().theme, // available themes are in /css/theme
+                transition: Reveal.getQueryHash().transition || 'default', // default/cube/page/concave/zoom/linear/fade/none
+
+                // Optional libraries used to extend on reveal.js
+                dependencies: [
+                    { src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+                    { src: 'plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+                    { src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+                    { src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+                    { src: 'plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
+                    { src: 'plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }
+                ]
+            });
+
+        </script>
+
+    </body>
+</html>
